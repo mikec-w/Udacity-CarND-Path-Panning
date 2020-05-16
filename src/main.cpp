@@ -112,7 +112,7 @@ int main() {
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
-
+                    
 
           // Sparsely spaced waypoints
           vector<double> ptsx;
@@ -149,7 +149,7 @@ int main() {
             ptsy.push_back(ref_y_prev);
             ptsy.push_back(ref_y);
           }
-        
+
           // Now push three points at 30m spacing in front of the car using Frenet coordinates
           vector<double> next_wp0 = getXY(car_s+30, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp1 = getXY(car_s+60, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -169,11 +169,12 @@ int main() {
           // Simple Shift and rotation
           for (int i = 0; i< ptsx.size(); i++)
           {
+            
             double shift_x = ptsx[i] - ref_x;
             double shift_y = ptsy[i] - ref_y;
 
-            ptsx[i] - (shift_x * cos(0-ref_yaw) - shift_y*sin(0-ref_yaw));
-            ptsy[i] - (shift_y * sin(0-ref_yaw) + shift_y*cos(0-ref_yaw));
+            ptsx[i] = (shift_x * cos(0-ref_yaw) - shift_y*sin(0-ref_yaw));
+            ptsy[i] = (shift_x * sin(0-ref_yaw) + shift_y*cos(0-ref_yaw));
           }
 
           // Create a spline
@@ -197,12 +198,9 @@ int main() {
           // Assuming it is close enough to linear for calculation
           double target_x = 30.0;
           double target_y = s(target_x);
-          double target_dist = sqrt((target_x*target_x)+(target_y*target_y));
+          double target_dist = sqrt((target_x)*(target_x)+(target_y)*(target_y));
 
           double x_add_on = 0;
-
-
-
 
           // fill in the rest of the path
           for (int i = 1; i <= 50-previous_path_x.size(); i++)
@@ -218,7 +216,7 @@ int main() {
 
             // translate back to world coordinates
             x_point = (x_ref * cos(ref_yaw) - y_ref*sin(ref_yaw));
-            y_point = (y_ref * sin(ref_yaw) - y_ref*cos(ref_yaw));
+            y_point = (x_ref * sin(ref_yaw) + y_ref*cos(ref_yaw));
 
             x_point += ref_x;
             y_point += ref_y;
