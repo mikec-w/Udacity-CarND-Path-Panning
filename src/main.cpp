@@ -51,18 +51,20 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
+  //Define some parameters for path finding
+  int target_lane = 1;    // 0 - left, 1 - middle, 2 - right
+  double target_velocity = 49.5; //mph
+
+  // Need to pass all parameters into lambda
+  h.onMessage([&target_lane, &target_velocity, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
 
-    //Define some parameters for path finding
-    int target_lane = 1;    // 0 - left, 1 - middle, 2 - right
-    double target_velocity = 49.5; //mph
-
+    // Some constants...
     double timestep = 0.02;     //sim timestep
     double mph_to_ms = 0.44704; // convert mph to ms^-1
-
+  
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -107,6 +109,58 @@ int main() {
           // Previous path - provided by the simulator.
           // Previous path is the remaining path from the previous iteration that has not been reached
           int prev_size = previous_path_x.size();
+
+          // SENSOR FUSION 
+          if (prev_size > 0)
+          {
+            car_s = end_path_s;
+          }
+
+          bool too_close = false;
+
+
+          //Find ref_v to use
+          for (int i = 0; i < sensor_fusion.size(); i++)
+          {
+            // find cars in my lane
+            float d = sensor_fusion[i][6];
+            if (d < (2+4*target_lane+2) && d > (2+4*target_lane-2))
+            {
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(vx*vx+vy*vy);
+              double check_car_s = sensor_fusion[i][5];
+
+              // if using prev points project s out
+              check_car_s+=((double)prev_size*timestep*check_speed);
+
+              // Check s values are greater than mine and s gap
+              if ((check_car_s > car_s) && ((check_car_s-car_s) < 30))
+              {
+                // too close
+                too_close = true;
+
+                // Get ID of car in front and use it's speed to set reference below...
+
+                // pULL OUT TO difference lane // blindly.
+                if (target_lane > 0)
+                {
+                  target_lane = 0;
+                }
+
+              }
+            }
+          }
+
+          // Slow down if too close
+          if (too_close)
+          {
+            target_velocity -= 1.0*mph_to_ms;
+          }
+          else if (target_velocity < 49.5)
+          {
+            target_velocity += 1.0*mph_to_ms;
+          }
 
           //Set up car reference location and orientation
           double ref_x = car_x;
