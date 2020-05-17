@@ -54,10 +54,11 @@ int main() {
   //Define some parameters for path finding
   int target_lane = 1;    // 0 - left, 1 - middle, 2 - right
   double target_velocity = 49.5; //mph
+  double max_long_acc = 0.25; // mph per 20ms
 
   // Need to pass all parameters into lambda
   h.onMessage([&target_lane, &target_velocity, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+               &map_waypoints_dx,&map_waypoints_dy, &max_long_acc]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
 
@@ -117,6 +118,7 @@ int main() {
           }
 
           bool too_close = false;
+          double car_infront_speed = 0;
 
 
           //Find ref_v to use
@@ -139,6 +141,7 @@ int main() {
               {
                 // too close
                 too_close = true;
+                car_infront_speed = check_speed;
 
                 // Get ID of car in front and use it's speed to set reference below...
 
@@ -153,7 +156,7 @@ int main() {
           }
 
           // Slow down if too close
-          if (too_close)
+          if (too_close && target_velocity > (car_infront_speed/mph_to_ms - 1.0*mph_to_ms))
           {
             target_velocity -= 1.0*mph_to_ms;
           }
@@ -166,13 +169,14 @@ int main() {
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
+          double ref_speed = car_speed;
                     
 
           // Sparsely spaced waypoints
           vector<double> ptsx;
           vector<double> ptsy;
 
-          // START BY CALCULATING THE INITIAL DIRECTION OF PATH
+          // START BY CALCULATING THE INITIAL DIRECTION OF PATH AND SPEED
 
           // If previous size is empty, use car to reference
           if (prev_size < 2)
@@ -197,6 +201,9 @@ int main() {
             double ref_y_prev = previous_path_y[prev_size-2];
             ref_yaw = atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
 
+            ref_speed = sqrt((ref_x-ref_x_prev)*(ref_x-ref_x_prev)+(ref_y-ref_y_prev)*(ref_y-ref_y_prev));
+            ref_speed = ref_speed / timestep / mph_to_ms; // in mph
+
             ptsx.push_back(ref_x_prev);
             ptsx.push_back(ref_x);
 
@@ -204,10 +211,13 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          // Now push three points at 30m spacing in front of the car using Frenet coordinates
-          vector<double> next_wp0 = getXY(car_s+30, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp1 = getXY(car_s+60, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp2 = getXY(car_s+90, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          // Push the next three points at steps based on car speed
+          double dist_step = target_velocity * 3/5;
+
+          // Now push three points at dist_step spacing in front of the car using Frenet coordinates
+          vector<double> next_wp0 = getXY(car_s+dist_step, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp1 = getXY(car_s+dist_step*2, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp2 = getXY(car_s+dist_step*3, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
           // Add to the way point list
           ptsx.push_back(next_wp0[0]);
@@ -250,16 +260,26 @@ int main() {
           // Break up the spline so we travel at reference velocity
           // As we have rotated to car frame - that is 30m along x-axis
           // Assuming it is close enough to linear for calculation
-          double target_x = 30.0;
+          double target_x = dist_step;
           double target_y = s(target_x);
           double target_dist = sqrt((target_x)*(target_x)+(target_y)*(target_y));
 
           double x_add_on = 0;
 
           // fill in the rest of the path
+          
+          // Max acceleration in 0.02seconds is c. 0.1mph 
+          
+          // Needs to be car speed at end of previous path
+          double speed_step = ref_speed;
+
+
           for (int i = 1; i <= 50-previous_path_x.size(); i++)
           {
-            double N = (target_dist/(timestep*target_velocity*mph_to_ms));
+            speed_step = speed_step + max_long_acc; 
+            if (speed_step > target_velocity) speed_step = target_velocity;
+
+            double N = (target_dist/(timestep*speed_step*mph_to_ms));
             double x_point = x_add_on+(target_x)/N;
             double y_point = s(x_point);
 

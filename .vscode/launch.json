@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/path_planning",
             "args": [],
-            "stopAtEntry": false,
+            "stopAtEntry": true,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,
