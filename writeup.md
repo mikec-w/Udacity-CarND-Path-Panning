@@ -67,7 +67,9 @@ As above but to the left.
 
 ### Putting it all together
 
-Combining the FSM, Speed controller and path planner allowed the car to drive acceptably along the highway. There are some areas that could be improved however. For example, the car does not exhibit good behaviour, such as tending to the outside lane if all lanes are empty. Additionally, the controller does not deliberately slow down below the speed of the surrounding cars meaning it can potentially become boxed in and unable to get across to the faster lane in certain circumstances. Ideally here it would be preferable to look further ahead and determine the optimum lane earlier. 
+Combining the FSM, Speed controller and path planner allowed the car to drive acceptably along the highway. There are some areas that could be improved however. For example, the car does not exhibit good driving behaviour, such as tending to the outside lane if all lanes are empty, only passing on the left, etc. Additionally, the controller does not deliberately slow down below the speed of the surrounding cars meaning it can potentially become boxed in and unable to get across to the faster lane in certain circumstances. Ideally here it would be preferable to look further ahead and determine the optimum lane earlier on and avoid this issues.
+
+It is also possible to reach high total accelerations by the car attempting to make two lane changes in rapid succession. This could be avoided by making all lane changes more gentle but a more refined technique would be to add an additional state after each lane change which pauses slightly to ensure that such double lane changes are two distinct operations.
 
 Finally there does appear, visually, to be more scope for tighter manouevres around other vehicles which could be achieved with more tuning of safety factors and improving the path planner to allow it to disgard an existing path. This, however, seems unnecessary as in reality, the distances achieved in the simulation would be comfortable in the real world.
 

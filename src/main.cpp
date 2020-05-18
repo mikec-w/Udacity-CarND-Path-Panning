@@ -137,7 +137,7 @@ int main() {
               if (car_ahead.dist_to_car_ahead < 50 || target_velocity < 48.5)
               {
                 vector<double> LaneSpeeds = AveLaneSpeed(car_s, sensor_fusion, prev_size, timestep);
-                  
+
                 // is there a faster lane? +1mph for hysterisis
                 if (max(LaneSpeeds)/mph_to_ms > target_velocity + 1.0)
                 {
@@ -245,7 +245,9 @@ int main() {
           {
             target_velocity = 49.5;
           }
-          std::cout << "Dist: " << car_ahead.dist_to_car_ahead << "\t" << "Speed: " << car_ahead.velocity_of_car_ahead/mph_to_ms << "\t" << "Target: " << target_velocity <<"\n";
+          
+          // Debugging output
+          //std::cout << "Dist: " << car_ahead.dist_to_car_ahead << "\t" << "Speed: " << car_ahead.velocity_of_car_ahead/mph_to_ms << "\t" << "Target: " << target_velocity <<"\n";
 
           // CREATE THE PATH
           json msgJson;
