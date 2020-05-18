@@ -9,7 +9,7 @@
 
 The aim of this project is to implement a suitable controller to drive a simulator in a highway style environment. It must ensure that the vehicle maintains suitable lane discipline, controls its speed, acceleration and jerk to suitable levels and maintain safe distance to other cars on the road. The simulated vehicle is also required to make progress, attempting suitable lane change and overtaking manoeuvres to pass slower moving vehicles.
 
-The simulator provided for this project is a perfect simulator where the provided path is always achieved. It does not apply any physical limitations on the vehicle hence why speed, acceleration and jerk need to be controlled in the definition of the path provided. 
+The simulator provided for this project is a perfect simulator where the provided path is always achieved. It does not apply any physical limitations on the vehicle hence why speed, acceleration and jerk need to be controlled in the definition of the path provided. The simulator can be downloaded from https://github.com/udacity/self-driving-car-sim/releases.
 
 The path is defined as a series of XY coordinates in the world frame. 
 
