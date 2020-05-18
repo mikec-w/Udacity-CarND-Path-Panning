@@ -59,18 +59,23 @@ int main() {
   // Define some parameters for path finding
   int target_lane = 1;    // 0 - left, 1 - middle, 2 - right
   double target_velocity = 49.5; //mph
-  double max_long_acc = 0.25; // mph per 20ms
+  double max_long_acc = 0.20; // mph per 20ms
+  int stepcount = 0;
+  lane_ahead car_ahead;
 
   // Need to pass all parameters into lambda
   h.onMessage([&target_lane, &target_velocity, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy, &max_long_acc, &CurrentState]
+               &map_waypoints_dx,&map_waypoints_dy, &max_long_acc, &CurrentState, &stepcount, &car_ahead]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
+
+    // Debug step
+    stepcount++;
 
     // Some constants...
     double timestep = 0.02;     //sim timestep
     double mph_to_ms = 0.44704; // convert mph to ms^-1
-  
+
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -105,65 +110,50 @@ int main() {
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          
-
-          /**
-           * TODO: define a path made up of (x,y) points that the car will visit
-           *   sequentially every .02 seconds
-           */
-          
           // Previous path - provided by the simulator.
           // Previous path is the remaining path from the previous iteration that has not been reached
           int prev_size = previous_path_x.size();
-          lane_ahead ahead;
+
+          // timer for stuck state
           int State_counter = 0;
 
-          std::cout << "Current State: " << CurrentState << "\n";
+          // Debugging Print outs
+          //std::cout << stepcount << "\t" << "State: " << CurrentState << "\t" << "Target Lane:" << "\t" << target_lane << "\n";
+          vector<double> LaneSpeeds = AveLaneSpeed(car_s, sensor_fusion, prev_size, timestep);
+          //std::cout << stepcount << "\t" << LaneSpeeds[0] << "\t" << LaneSpeeds[1] << "\t" << LaneSpeeds[2] << "\n";
+
+
+          // Update Car ahead information
+          car_ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
 
           // STATE MACHINE - TRANSITIONS
           switch(CurrentState)
           {
+
+            // STAY IN LANE STATE
             case(State::STAY_IN_LANE):
             {
-              ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
-              
-              if (ahead.dist_to_car_ahead < 50 || target_velocity < 48.5)
+              // If there is a car in front OR we are not going at max target - look for a faster lane
+              if (car_ahead.dist_to_car_ahead < 50 || target_velocity < 48.5)
               {
-                  // Make decision
-                  vector<double> LaneSpeeds = AveLaneSpeed(car_s, sensor_fusion, prev_size, timestep);
+                vector<double> LaneSpeeds = AveLaneSpeed(car_s, sensor_fusion, prev_size, timestep);
                   
-                // is there a faster lane? +2 for hysterisis
+                // is there a faster lane? +1mph for hysterisis
                 if (max(LaneSpeeds)/mph_to_ms > target_velocity + 1.0)
                 {
                   int Fastest_Lane = MaxValInd(LaneSpeeds);
-                  std::cout << "Fastest Lane: " << Fastest_Lane;
                   
                   // If so - attempt move in that direction
                   if (Fastest_Lane > target_lane)
                   {
-                    std::cout << "State: Prep Right";
                     CurrentState = PREP_RIGHT_CHANGE;
                   }
                   if (Fastest_Lane < target_lane)
                   {
-                    std::cout << "State: Prep Left";
                     CurrentState = PREP_LEFT_CHANGE;
                   }
                 }
-                  // Otherwise - match speed of car ahead....
               
-                if (target_velocity > (ahead.velocity_of_car_ahead/mph_to_ms - 2.0*mph_to_ms))
-                {
-                    target_velocity -= 1.0*mph_to_ms;
-                }
-                else if (target_velocity < 49.5)
-                {
-                  target_velocity += 1.0*mph_to_ms;  
-                }
-              }
-              else
-              {
-                 if (target_velocity < 49.5) target_velocity += 1.0*mph_to_ms;
               }
             
               break;
@@ -178,6 +168,7 @@ int main() {
               {
                   //Abort
                   State_counter = 0;
+                  //std::cout << "Counter Expired" << "\n";
                   CurrentState = STAY_IN_LANE;
               }
               else
@@ -187,27 +178,11 @@ int main() {
 
               // Look for suitable gap
               bool IsSafe = IsSafeGap(target_lane-1, car_s, sensor_fusion, prev_size, timestep);
-              std::cout << "Is Safe Left: " << IsSafe << "\n";
 
               if (IsSafe)
               {
                   // Go for lane change...
                   CurrentState = LEFT_CHANGE;
-                  std::cout << "State: Go Left";
-              }
-              else 
-              {
-                // Maintain velocity of car ahead
-                ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
-                // Otherwise - match speed of car ahead....
-                if ((target_velocity > (ahead.velocity_of_car_ahead/mph_to_ms - 2.0*mph_to_ms)) && (ahead.dist_to_car_ahead < 30))
-                {
-                    target_velocity -= 1.0*mph_to_ms;
-                }
-                else if (target_velocity < 49.5)
-                {
-                  target_velocity += 1.0*mph_to_ms;
-                }
               }
             }
             break;
@@ -226,45 +201,53 @@ int main() {
               }
               // Look for suitable gap
               bool IsSafe = IsSafeGap(target_lane+1, car_s, sensor_fusion, prev_size, timestep);
-              std::cout << "Is Safe Right: " << IsSafe << "\n";
               
               if (IsSafe)
               {
                   // Go for lane change...
-                  std::cout << "State: Go Right";
+                  //std::cout << "State: Go Right";
                   CurrentState = RIGHT_CHANGE;
-              }
-              else 
-              {
-                // Maintain velocity of car ahead
-                ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
-                // Otherwise - match speed of car ahead....
-                if ((target_velocity > (ahead.velocity_of_car_ahead/mph_to_ms - 2.0*mph_to_ms)) && (ahead.dist_to_car_ahead < 30))
-                {
-                    target_velocity -= 1.0*mph_to_ms;
-                }
-                else if (target_velocity < 49.5)
-                {
-                  target_velocity += 1.0*mph_to_ms;
-                }
               }
             }
             break;
+            //PERFORM LEFT LANE CHANGE
             case(State::LEFT_CHANGE):
               if (target_lane > 0) target_lane = target_lane-1;
-              ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
+              car_ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
               CurrentState = STAY_IN_LANE;
-              std::cout << "State: Stay";
             break;
+            //PERFORM RIGHT LANE CHANGE
             case(State::RIGHT_CHANGE):
-              if (target_lane < 2) target_lane = target_lane+1;
-              ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
-              //target_velocity = ahead.velocity_of_car_ahead/mph_to_ms;
+              if (target_lane < 2) target_lane = target_lane+1;            
+              car_ahead = IsLaneClear(target_lane, car_s, sensor_fusion, prev_size, timestep);
               CurrentState = STAY_IN_LANE;
-              std::cout << "State: Stay";
-            break;
+              break;
           }
 
+          // SPEED CONTROLLER
+          // Target gap to car in front- simple proportional controller
+          // Max accel handled later
+          double target_gap = 30;
+          double prop_gain = 1;
+
+          
+          if (car_ahead.dist_to_car_ahead < 50)
+          {   
+              // clip dist
+              double error = car_ahead.dist_to_car_ahead - target_gap;
+              // saturate
+              if (error > 10) error = 10;
+          
+              target_velocity = car_ahead.velocity_of_car_ahead/mph_to_ms + (error*prop_gain);
+              if (target_velocity > 49.5) target_velocity = 49.5;
+          }
+          else if (target_velocity < 49.5)
+          {
+            target_velocity = 49.5;
+          }
+          std::cout << "Dist: " << car_ahead.dist_to_car_ahead << "\t" << "Speed: " << car_ahead.velocity_of_car_ahead/mph_to_ms << "\t" << "Target: " << target_velocity <<"\n";
+
+          // CREATE THE PATH
           json msgJson;
 
           //Set up car reference location and orientation
@@ -314,10 +297,11 @@ int main() {
           }
 
           // Push the next three points at steps based on car speed
-          double dist_step = target_velocity;
-
+          double dist_step = ref_speed;
+          if (dist_step < 30) dist_step = 30;
+          
           // Now push three points at dist_step spacing in front of the car using Frenet coordinates
-          vector<double> next_wp0 = getXY(car_s+dist_step, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp0 = getXY(car_s+dist_step*1.15, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp1 = getXY(car_s+dist_step*2, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp2 = getXY(car_s+dist_step*3, (2+4*target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
@@ -345,6 +329,12 @@ int main() {
 
           // Create a spline
           tk::spline s;
+
+          // Debugging output
+          //std::cout << "Dist Step: " << dist_step << "\t" << "Velo: " << target_velocity << "\n";
+          //std::cout << "X:" << ptsx[0] << "\t" << ptsx[1] << "\t" << ptsx[2] << "\t" << ptsx[3]  << "\t" << ptsx[4] << "\t";
+          //std::cout << "Y:" << ptsy[0] << "\t" << ptsy[1] << "\t" << ptsy[2] << "\t" << ptsy[3]  << "\t" << ptsy[4] << "\t";
+          //std::cout << "Yaw: " << ref_yaw << "\n";
 
           s.set_points(ptsx, ptsy);
 
@@ -378,8 +368,17 @@ int main() {
 
           for (int i = 1; i <= 50-previous_path_x.size(); i++)
           {
-            speed_step = speed_step + max_long_acc; 
-            if (speed_step > target_velocity) speed_step = target_velocity;
+
+            // Limit longitudinal acceleration
+            if (target_velocity > speed_step)
+            {
+              speed_step += max_long_acc; 
+              if (speed_step > target_velocity) speed_step = target_velocity;
+            }
+            else
+            {
+              speed_step -= max_long_acc;
+            }
 
             double N = (target_dist/(timestep*speed_step*mph_to_ms));
             double x_point = x_add_on+(target_x)/N;
@@ -401,23 +400,6 @@ int main() {
             next_x_vals.push_back(x_point);
             next_y_vals.push_back(y_point);
           }
-
-          /*Example from Getting Started
-           double dist_inc = 0.4;
-           for (int i = 0; i < 50; ++i) {
-             //Stay in constant lane
-             double next_s = car_s+(i+1)*dist_inc;
-             double next_d = 6;
-
-             //Convert from Frenet to XY
-             vector<double> XY = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
-             //next_x_vals.push_back(car_x+(dist_inc*i)*cos(deg2rad(car_yaw)));
-             //next_y_vals.push_back(car_y+(dist_inc*i)*sin(deg2rad(car_yaw)));
-             next_x_vals.push_back(XY[0]);
-             next_y_vals.push_back(XY[1]);
-           }
-          */
 
           // END of path creation
           msgJson["next_x"] = next_x_vals;
